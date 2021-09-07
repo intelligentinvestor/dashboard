@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>InvestSMART DevOps</title>
+
+    <!-- Bootstrap core CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+
+    <!-- Custom styles for this template -->
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.4/angular.min.js"></script>
+
+    <!-- Font awesome -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css"> 
+
+    <style>
+      body {
+        padding-top: 10px;
+      }
+      @media (min-width: 992px) {
+        body {
+          padding-top: 10px;
+        }
+      }
+      .table.is-dashboard tr td { padding: 5px; }
+      .table.is-dashboard tr:first-child td { padding-top: 10px; }
+      .table.is-dashboard tr:last-child td { padding-bottom: 10px; }
+      table
+    </style>
+
+  </head>
+
+  <body>
+    <!-- Page Content -->
+    <div class="container-fluid" ng-app="myApp" ng-controller="myCtrl">
+      <div class="row">
+        <div class="col-12 text-center">
+          <table class="table table-hover table-inverse text-left is-dashboard">
+            <thead>
+              <tr>
+                <th class="">ENVIRONMENT</th>                
+                <th class="">WWW</th>                
+                <th class="">API</th>                
+              </tr>
+            </thead>
+            <tbody class="border-top-0" ng-repeat="x in versions">
+              <tr>
+                <td class=""><span class="font-weight-bold h5">{{x.displayName||x.envName}}</span></td>
+                
+                <td ng-repeat="a in x.apps">                   
+                  <a ng-href="{{a.url}}">{{a.urlName}}</a> 
+                  <span ng-class='{"invisible": a.lastStatusCodeIsFetching}'>({{a.lastStatusCode}})</span>
+                  <i class="fa fa-spinner fa-spin" ng-class='{"invisible": !a.lastStatusCodeIsFetching}'></i>
+                </td>
+              </tr>
+              <tr>
+                <td class="border-top-0"><img class="" ng-src="{{x.buildStatusUrl}}"></img></td>                
+                <td class="border-top-0" ng-repeat="a in x.apps">                   
+                  <span class="">{{a.version}} <i class="fa fa-spinner fa-spin" ng-class='{"invisible": !a.versionIsFetching}'></i> </span>                  
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+
+          <p class="lead">Time to next refresh {{countDown}}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bootstrap core JavaScript -->
+    <script src="vendor/jquery/jquery.min.js"></script>
+    <script src="vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+    var app = angular.module("myApp", []);
+
+    app.controller("myCtrl", function($scope, $http, $interval) {
+
+
+      var defaultApps = [
+              { "name" : "www", "version" : "",  "versionIsFetching" : false, "lastStatusCode": "", "lastStatusCodeIsFetching" : false },               
+              { "name" : "api", "version" : "",  "versionIsFetching" : false, "lastStatusCode": "" , "lastStatusCodeIsFetching" : false },              
+          ];
+
+      var baseUrlPath = `https://investsmart-devops.visualstudio.com/investsmart/_apis/build/status`
+
+
+      $scope.versions = [      
+        { 
+          "envName" : "mastercln", "apps" : JSON.parse(JSON.stringify(defaultApps)),
+          "buildStatusUrl" : `${baseUrlPath}/bd-master-v2`
+        },        
+        { 
+          "envName" : "mastercln", "apps" : JSON.parse(JSON.stringify(defaultApps)), "isSlot" : true, "displayName":"master-stg",
+          "buildStatusUrl" : `${baseUrlPath}/bd-master-v2`
+        },
+        { 
+          "envName" : "develop", "apps" : JSON.parse(JSON.stringify(defaultApps)),
+          "buildStatusUrl" : `${baseUrlPath}/bd-develop`
+        },
+        { 
+          "envName" : "rs", "apps" : JSON.parse(JSON.stringify(defaultApps)),
+          "buildStatusUrl" : `${baseUrlPath}/bd-rs`
+        },
+        { 
+          "envName" : "gb", "apps" : JSON.parse(JSON.stringify(defaultApps)),
+          "buildStatusUrl" : `${baseUrlPath}/bd-gb`
+        }, 
+        { 
+          "envName" : "pz", "apps" : JSON.parse(JSON.stringify(defaultApps)),
+          "buildStatusUrl" : `${baseUrlPath}/bd-pz`
+        },
+        { 
+          "envName" : "ff", "apps" : JSON.parse(JSON.stringify(defaultApps)),
+          "buildStatusUrl" : `${baseUrlPath}/bd-ff`
+        }
+      ]
+
+      function updateVals() {
+        angular.forEach($scope.versions, function(env, key){
+          
+          angular.forEach(env.apps, function(a, k) {
+
+            var httpOptions = {headers: { 'Cache-Control' : 'no-cache','Content-Type': 'text/plain' }};
+            var httpOptions = {}; // leave empty for now until we solve the "OPTIONS" issue at the server level. Previously throwing exceptions (see Live Metrics)
+
+            var envName = env.envName;
+            var appName = a.name;
+
+            var scheme = "https://"
+            var subDomain = envName + "-" + appName;
+
+            if(env.isSlot)
+            {              
+              subDomain = subDomain + '-' + 'stg';              
+            }
+
+            var url = scheme.concat(subDomain, ".", "investsmart.com.au");
+            var versionUrl = url.concat("/version.txt");
+
+            a.url = url;
+            a.urlName = subDomain;           
+
+            a.versionIsFetching = true;
+            $http.get(versionUrl).then(
+              function(res){
+              var pos = res.data.indexOf('@');
+              var ver = res.data.substring(0,pos);
+              a.version = ver;
+              a.versionIsFetching = false;
+            }, function(res){
+              a.version = res.data;
+              a.versionIsFetching = false;
+            });
+
+            a.lastStatusCodeIsFetching = true;
+            $http.get(url, httpOptions).then(
+              function(res){
+              a.lastStatusCode = res.status;
+              a.lastStatusCodeIsFetching = false;
+            }, function(res){
+              a.lastStatusCode = res.status;
+              a.lastStatusCodeIsFetching = false;
+            });
+
+          });
+        });
+      };
+
+
+      updateVals();
+      
+      var refreshEvery = 120; // seconds      
+      $scope.countDown = refreshEvery;
+      $interval(function(){ 
+        $scope.countDown--;
+        if($scope.countDown == 0)
+        {          
+          updateVals();
+          $scope.countDown = refreshEvery;
+        }
+      },1000,0);
+
+
+      function hardRefreshPage() {
+          location.reload(true);
+      };
+
+      var hardRefreshInMinutes = 1;
+      var hardRefreshInMinutesInMilli = hardRefreshInMinutes*60*1000;
+      setInterval(hardRefreshPage, hardRefreshInMinutesInMilli);
+    });
+    </script>
+  </body>
+</html>
